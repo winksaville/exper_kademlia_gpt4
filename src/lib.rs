@@ -1,15 +1,29 @@
+// kademlia/src/lib.rs
+
 //use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 use std::net::SocketAddr;
-use std::net::UdpSocket;
+use std::sync::Arc;
+use std::fmt::Debug;
+
+//use tokio::net::UdpSocket;
+
 use serde::{Deserialize, Serialize};
 
-const BUCKET_SIZE: usize = 20;
+pub const BUCKET_SIZE: usize = 20;
+
+// The FindNodeTrait
+//pub trait FindNodeTrait: Send + Sync + Debug {
+//  async fn find_node_request(&self, node: &Node, target: u64) -> Result<Vec<Node>, ()>;
+//}
+pub trait FindNodeTrait {
+    fn find_node_request(&self, node: &Node, target: u64) -> Result<Vec<Node>, ()>;
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-struct Node {
-    id: u64,
-    addr: SocketAddr,
+pub struct Node {
+    pub id: u64,
+    pub addr: SocketAddr,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -25,17 +39,24 @@ impl NodeDistance {
     }
 }
 
-#[derive(Debug)]
-#[allow(unused)]
-struct Kademlia {
+//#[derive(Debug)]
+pub struct Kademlia {
+    #[allow(unused)]
     node: Node,
     buckets: Vec<BinaryHeap<NodeDistance>>,
-    socket: UdpSocket,
+    find_node_impl: Arc<dyn FindNodeTrait>,
 }
 
-#[allow(unused)]
 impl Kademlia {
-    async fn find_node(&mut self, target: u64) -> Vec<Node> {
+    pub fn new(node: Node, find_node_impl: Arc<dyn FindNodeTrait>) -> Self {
+        Kademlia {
+            node,
+            buckets: vec![BinaryHeap::new(); 160],
+            find_node_impl,
+        }
+    }
+
+    pub async fn find_node(&mut self, target: u64) -> Vec<Node> {
         let mut closest_nodes = BinaryHeap::with_capacity(BUCKET_SIZE);
         let mut visited_nodes = Vec::new();
 
@@ -55,7 +76,7 @@ impl Kademlia {
 
         while let Some(current_node) = closest_nodes.pop() {
             visited_nodes.push(current_node.node.clone());
-            let response = self.send_find_node_request(&current_node.node, target).await;
+            let response = self.find_node_impl.find_node_request(&current_node.node, target);
 
             match response {
                 Ok(nodes) => {
@@ -82,17 +103,4 @@ impl Kademlia {
 
         visited_nodes
     }
-
-    async fn send_find_node_request(&self, _node: &Node, _target: u64) -> Result<Vec<Node>, ()> {
-        // Send find_node request to the given node and return the list of nodes received
-        // This function is a placeholder for the actual implementation of sending and receiving
-        // messages over the network
-        //unimplemented!()
-        Ok(vec![])
-    }
 }
-
-fn main() {
-    // Example usage of Kademlia::find_node
-}
-
